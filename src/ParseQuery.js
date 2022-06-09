@@ -961,6 +961,8 @@ class ParseQuery {
     }
     query._hint = this._hint;
     query._where = {};
+    query._queriesLocalDatastore = this._queriesLocalDatastore;
+    query._localDatastorePinName = this._localDatastorePinName;
     for (const attr in this._where) {
       const val = this._where[attr];
       if (Array.isArray(val)) {

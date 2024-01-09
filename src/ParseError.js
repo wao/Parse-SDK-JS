@@ -1,14 +1,9 @@
-/**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- */
+import CoreManager from './CoreManager';
 
 /**
  * Constructs a new Parse.Error object with the given code and message.
+ *
+ * Parse.CoreManager.set('PARSE_ERRORS', [{ code, message }]) can be use to override error messages.
  *
  * @alias Parse.Error
  */
@@ -20,9 +15,15 @@ class ParseError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;
+    let customMessage = message;
+    CoreManager.get('PARSE_ERRORS').forEach((error) => {
+      if (error.code === code && error.code) {
+        customMessage = error.message;
+      }
+    });
     Object.defineProperty(this, 'message', {
       enumerable: true,
-      value: message,
+      value: customMessage,
     });
   }
 

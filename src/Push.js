@@ -1,11 +1,4 @@
 /**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -106,8 +99,10 @@ export function getPushStatus(pushStatusId: string, options?: FullOptions = {}):
 }
 
 const DefaultController = {
-  send(data: PushData, options?: FullOptions) {
-    return CoreManager.getRESTController().request('POST', 'push', data, options);
+  async send(data: PushData, options?: FullOptions) {
+    options.returnStatus = true;
+    const response = await CoreManager.getRESTController().request('POST', 'push', data, options);
+    return response._headers?.['X-Parse-Push-Status-Id'];
   },
 };
 

@@ -26,6 +26,19 @@ const defaultCLPS = {
 };
 
 describe('Schema', () => {
+  beforeEach(async () => {
+    try {
+      const schemas = await Parse.Schema.all();
+      for (const result of schemas) {
+        const schema = new Parse.Schema(result.className);
+        await schema.purge();
+        await schema.delete();
+      }
+    } catch (_) {
+      // Schema not found
+    }
+  });
+
   it('invalid get all no schema', done => {
     Parse.Schema.all()
       .then(() => {})
@@ -59,6 +72,7 @@ describe('Schema', () => {
       .addString('stringField')
       .addNumber('numberField')
       .addBoolean('booleanField')
+      .addBytes('bytesField')
       .addDate('dateField')
       .addFile('fileField')
       .addGeoPoint('geoPointField')
@@ -78,6 +92,7 @@ describe('Schema', () => {
         assert.equal(result.fields.stringField.type, 'String');
         assert.equal(result.fields.numberField.type, 'Number');
         assert.equal(result.fields.booleanField.type, 'Boolean');
+        assert.equal(result.fields.bytesField.type, 'Bytes');
         assert.equal(result.fields.dateField.type, 'Date');
         assert.equal(result.fields.fileField.type, 'File');
         assert.equal(result.fields.geoPointField.type, 'GeoPoint');
@@ -169,6 +184,7 @@ describe('Schema', () => {
         required: true,
         defaultValue: '2000-01-01T00:00:00.000Z',
       })
+      .addBytes('bytesField', { required: true, defaultValue: 'ParseA==' })
       .addFile('fileField', { required: true, defaultValue: file })
       .addGeoPoint('geoPointField', { required: true, defaultValue: point })
       .addPolygon('polygonField', { required: true, defaultValue: polygon })
@@ -191,6 +207,11 @@ describe('Schema', () => {
       stringField: { type: 'String', required: true, defaultValue: 'world' },
       numberField: { type: 'Number', required: true, defaultValue: 10 },
       booleanField: { type: 'Boolean', required: true, defaultValue: false },
+      bytesField: {
+        type: 'Bytes',
+        required: true,
+        defaultValue: { __type: 'Bytes', base64: 'ParseA==' },
+      },
       dateField: {
         type: 'Date',
         required: true,
@@ -232,6 +253,7 @@ describe('Schema', () => {
       stringField: 'world',
       numberField: 10,
       booleanField: false,
+      bytesField: { __type: 'Bytes', base64: 'ParseA==' },
       dateField: { __type: 'Date', iso: '2000-01-01T00:00:00.000Z' },
       dateStringField: { __type: 'Date', iso: '2000-01-01T00:00:00.000Z' },
       fileField: file.toJSON(),

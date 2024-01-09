@@ -1,11 +1,4 @@
 /**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -19,6 +12,7 @@ const FIELD_TYPES = [
   'String',
   'Number',
   'Boolean',
+  'Bytes',
   'Date',
   'File',
   'GeoPoint',
@@ -241,6 +235,22 @@ class ParseSchema {
     if (options.defaultValue !== undefined) {
       fieldOptions.defaultValue = options.defaultValue;
     }
+    if (type === 'Date') {
+      if (options && options.defaultValue) {
+        fieldOptions.defaultValue = {
+          __type: 'Date',
+          iso: new Date(options.defaultValue),
+        };
+      }
+    }
+    if (type === 'Bytes') {
+      if (options && options.defaultValue) {
+        fieldOptions.defaultValue = {
+          __type: 'Bytes',
+          base64: options.defaultValue,
+        };
+      }
+    }
     this._fields[name] = fieldOptions;
     return this;
   }
@@ -303,6 +313,17 @@ class ParseSchema {
   }
 
   /**
+   * Adding Bytes Field
+   *
+   * @param {string} name Name of the field that will be created on Parse
+   * @param {object} options See {@link https://parseplatform.org/Parse-SDK-JS/api/master/Parse.Schema.html#addField addField}
+   * @returns {Parse.Schema} Returns the schema, so you can chain this call.
+   */
+  addBytes(name: string, options: FieldOptions) {
+    return this.addField(name, 'Bytes', options);
+  }
+
+  /**
    * Adding Date Field
    *
    * @param {string} name Name of the field that will be created on Parse
@@ -310,12 +331,6 @@ class ParseSchema {
    * @returns {Parse.Schema} Returns the schema, so you can chain this call.
    */
   addDate(name: string, options: FieldOptions) {
-    if (options && options.defaultValue) {
-      options.defaultValue = {
-        __type: 'Date',
-        iso: new Date(options.defaultValue),
-      };
-    }
     return this.addField(name, 'Date', options);
   }
 

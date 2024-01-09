@@ -1,12 +1,3 @@
-/**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- */
-
 jest.autoMockOff();
 
 const matchesQuery = require('../OfflineQuery').matchesQuery;
@@ -471,6 +462,15 @@ describe('OfflineQuery', () => {
     expect(matchesQuery(q.className, pt, [], q)).toBe(true);
   });
 
+  it('matches $centerSphere queries', () => {
+    const pt = new ParseObject('Checkin');
+    pt.set('location', new ParseGeoPoint(40, 40));
+
+    const q = new ParseQuery('Checkin');
+    q.withinRadians('location', new ParseGeoPoint(30, 30), 0.3, false);
+    expect(matchesQuery(q.className, pt, [], q)).toBe(true);
+  });
+
   it('matches $within queries', () => {
     const caltrainStation = new ParseObject('Checkin');
     caltrainStation
@@ -598,6 +598,33 @@ describe('OfflineQuery', () => {
       ParseObject.fromJSON({ className: 'Profile', objectId: 'ghi' }),
       ParseObject.fromJSON({ className: 'Profile', objectId: 'def' }),
     ]);
+    expect(matchesQuery(q.className, message, [], q)).toBe(false);
+  });
+
+  it('should support containedIn with array of pointers', () => {
+    const profile1 = new ParseObject('Profile');
+    profile1.id = 'yeahaw';
+    const profile2 = new ParseObject('Profile');
+    profile2.id = 'yes';
+
+    const message = new ParseObject('Message');
+    message.id = 'O2';
+    message.set('profiles', [profile1, profile2]);
+
+    let q = new ParseQuery('Message');
+    q.containedIn('profiles', [
+      ParseObject.fromJSON({ className: 'Profile', objectId: 'no' }),
+      ParseObject.fromJSON({ className: 'Profile', objectId: 'yes' }),
+    ]);
+
+    expect(matchesQuery(q.className, message, [], q)).toBe(true);
+
+    q = new ParseQuery('Message');
+    q.containedIn('profiles', [
+      ParseObject.fromJSON({ className: 'Profile', objectId: 'no' }),
+      ParseObject.fromJSON({ className: 'Profile', objectId: 'nope' }),
+    ]);
+
     expect(matchesQuery(q.className, message, [], q)).toBe(false);
   });
 
@@ -819,6 +846,33 @@ describe('OfflineQuery', () => {
     expect(matchesQuery(q.className, obj1, [], q)).toBe(true);
     expect(matchesQuery(q.className, obj2, [], q)).toBe(true);
     expect(matchesQuery(q.className, obj3, [], q)).toBe(false);
+  });
+
+  it('should not support invalid $geoWithin query', () => {
+    const sacramento = new ParseObject('Location');
+    sacramento.set('location', new ParseGeoPoint(38.52, -121.5));
+    sacramento.set('name', 'Sacramento');
+
+    const honolulu = new ParseObject('Location');
+    honolulu.set('location', new ParseGeoPoint(21.35, -157.93));
+    honolulu.set('name', 'Honolulu');
+
+    const sf = new ParseObject('Location');
+    sf.set('location', new ParseGeoPoint(37.75, -122.68));
+    sf.set('name', 'San Francisco');
+
+    const points = [
+      new ParseGeoPoint(37.85, -122.33),
+      new ParseGeoPoint(37.85, -122.9),
+      new ParseGeoPoint(37.68, -122.9),
+      new ParseGeoPoint(37.68, -122.33),
+    ];
+    const q = new ParseQuery('Location');
+    q._addCondition('location', '$geoWithin', { $unknown: points });
+
+    expect(matchesQuery(q.className, sacramento, [], q)).toBe(false);
+    expect(matchesQuery(q.className, honolulu, [], q)).toBe(false);
+    expect(matchesQuery(q.className, sf, [], q)).toBe(false);
   });
 
   it('should validate query', () => {

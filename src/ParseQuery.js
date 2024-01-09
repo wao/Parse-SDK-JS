@@ -1,11 +1,4 @@
 /*
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -29,6 +22,7 @@ export type WhereClause = {
 
 export type QueryJSON = {
   where: WhereClause,
+  watch?: string,
   include?: string,
   excludeKeys?: string,
   keys?: string,
@@ -231,6 +225,7 @@ class ParseQuery {
    */
   className: string;
   _where: any;
+  _watch: Array<string>;
   _include: Array<string>;
   _exclude: Array<string>;
   _select: Array<string>;
@@ -272,6 +267,7 @@ class ParseQuery {
     }
 
     this._where = {};
+    this._watch = [];
     this._include = [];
     this._exclude = [];
     this._count = false;
@@ -433,6 +429,9 @@ class ParseQuery {
       where: this._where,
     };
 
+    if (this._watch.length) {
+      params.watch = this._watch.join(',');
+    }
     if (this._include.length) {
       params.include = this._include.join(',');
     }
@@ -500,6 +499,10 @@ class ParseQuery {
   withJSON(json: QueryJSON): ParseQuery {
     if (json.where) {
       this._where = json.where;
+    }
+
+    if (json.watch) {
+      this._watch = json.watch.split(',');
     }
 
     if (json.include) {
@@ -603,7 +606,6 @@ class ParseQuery {
    *   <li>context: A dictionary that is accessible in Cloud Code `beforeFind` trigger.
    *   <li>json: Return raw json without converting to Parse.Object
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the result when
    * the query completes.
    */
@@ -646,7 +648,6 @@ class ParseQuery {
    *   <li>context: A dictionary that is accessible in Cloud Code `beforeFind` trigger.
    *   <li>json: Return raw json without converting to Parse.Object
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the results when
    * the query completes.
    */
@@ -740,7 +741,6 @@ class ParseQuery {
    *   <li>sessionToken: A valid session token, used for making a request on
    *       behalf of a specific user.
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the count when
    * the query completes.
    */
@@ -776,7 +776,6 @@ class ParseQuery {
    *   <li>sessionToken: A valid session token, used for making a request on
    *       behalf of a specific user.
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the query completes.
    */
   distinct(key: string, options?: FullOptions): Promise<Array<mixed>> {
@@ -809,7 +808,6 @@ class ParseQuery {
    *   <li>sessionToken: A valid session token, used for making a request on
    *       behalf of a specific user.
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the query completes.
    */
   aggregate(pipeline: mixed, options?: FullOptions): Promise<Array<mixed>> {
@@ -832,7 +830,7 @@ class ParseQuery {
       if (!Array.isArray(pipeline)) {
         pipeline = [pipeline];
       }
-      pipeline.unshift({ match: this._where });
+      pipeline.unshift({ $match: this._where });
     }
 
     const params = {
@@ -859,7 +857,6 @@ class ParseQuery {
    *   <li>context: A dictionary that is accessible in Cloud Code `beforeFind` trigger.
    *   <li>json: Return raw json without converting to Parse.Object
    * </ul>
-   *
    * @returns {Promise} A promise that is resolved with the object when
    * the query completes.
    */
@@ -951,13 +948,10 @@ class ParseQuery {
 
     const query = new ParseQuery(this.className);
     query._limit = options.batchSize || 100;
-    query._include = this._include.map(i => {
-      return i;
-    });
+    query._include = [...this._include];
+    query._exclude = [...this._exclude];
     if (this._select) {
-      query._select = this._select.map(s => {
-        return s;
-      });
+      query._select = [...this._select];
     }
     query._hint = this._hint;
     query._where = {};
@@ -991,6 +985,9 @@ class ParseQuery {
     }
     if (options.hasOwnProperty('context') && typeof options.context === 'object') {
       findOptions.context = options.context;
+    }
+    if (options.hasOwnProperty('json')) {
+      findOptions.json = options.json;
     }
 
     let finished = false;
@@ -1032,6 +1029,7 @@ class ParseQuery {
    *     be used for this request.
    *   <li>sessionToken: A valid session token, used for making a request on
    *       behalf of a specific user.
+   *   <li>json: Return raw json without converting to Parse.Object
    * </ul>
    * @returns {Promise} A promise that will be fulfilled once the
    *     iteration has completed.
@@ -1089,7 +1087,6 @@ class ParseQuery {
    *   <li>index: The index of the current Parse.Object being processed in the array.</li>
    *   <li>query: The query map was called upon.</li>
    * </ul>
-   *
    * @param {object} options Valid options are:<ul>
    *   <li>useMasterKey: In Cloud Code and Node only, causes the Master Key to
    *     be used for this request.
@@ -1178,7 +1175,6 @@ class ParseQuery {
    *   <li>index: The index of the current Parse.Object being processed in the array.</li>
    *   <li>query: The query filter was called upon.</li>
    * </ul>
-   *
    * @param {object} options Valid options are:<ul>
    *   <li>useMasterKey: In Cloud Code and Node only, causes the Master Key to
    *     be used for this request.
@@ -1205,7 +1201,7 @@ class ParseQuery {
     return array;
   }
 
-  /** Query Conditions **/
+  /* Query Conditions */
 
   /**
    * Adds a constraint to the query that requires a particular key's value to
@@ -1297,10 +1293,10 @@ class ParseQuery {
    * be contained in the provided list of values.
    *
    * @param {string} key The key to check.
-   * @param {*} value The values that will match.
+   * @param {Array<*>} value The values that will match.
    * @returns {Parse.Query} Returns the query, so you can chain this call.
    */
-  containedIn(key: string, value: mixed): ParseQuery {
+  containedIn(key: string, value: Array<mixed>): ParseQuery {
     return this._addCondition(key, '$in', value);
   }
 
@@ -1309,10 +1305,10 @@ class ParseQuery {
    * not be contained in the provided list of values.
    *
    * @param {string} key The key to check.
-   * @param {*} value The values that will not match.
+   * @param {Array<*>} value The values that will not match.
    * @returns {Parse.Query} Returns the query, so you can chain this call.
    */
-  notContainedIn(key: string, value: mixed): ParseQuery {
+  notContainedIn(key: string, value: Array<mixed>): ParseQuery {
     return this._addCondition(key, '$nin', value);
   }
 
@@ -1734,7 +1730,7 @@ class ParseQuery {
     return this._addCondition(key, '$geoIntersects', { $point: point });
   }
 
-  /** Query Orderings **/
+  /* Query Orderings */
 
   /**
    * Sorts the results in ascending order by the given key.
@@ -1811,7 +1807,7 @@ class ParseQuery {
     return this;
   }
 
-  /** Query Options **/
+  /* Query Options */
 
   /**
    * Sets the number of results to skip before returning any results.
@@ -1929,6 +1925,25 @@ class ParseQuery {
         this._exclude = this._exclude.concat(key);
       } else {
         this._exclude.push(key);
+      }
+    });
+    return this;
+  }
+
+  /**
+   * Restricts live query to trigger only for watched fields.
+   *
+   * Requires Parse Server 6.0.0+
+   *
+   * @param {...string|Array<string>} keys The name(s) of the key(s) to watch.
+   * @returns {Parse.Query} Returns the query, so you can chain this call.
+   */
+  watch(...keys: Array<string | Array<string>>): ParseQuery {
+    keys.forEach(key => {
+      if (Array.isArray(key)) {
+        this._watch = this._watch.concat(key);
+      } else {
+        this._watch.push(key);
       }
     });
     return this;

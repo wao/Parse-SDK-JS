@@ -1,20 +1,8 @@
-/*
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-import EventEmitter from './EventEmitter';
 import CoreManager from './CoreManager';
 import { resolvingPromise } from './promiseUtils';
 
 /**
  * Creates a new LiveQuery Subscription.
- * Extends events.EventEmitter
  * <a href="https://nodejs.org/api/events.html#events_class_eventemitter">cloud functions</a>.
  *
  * <p>Response Object - Contains data from the client that made the request
@@ -94,23 +82,25 @@ import { resolvingPromise } from './promiseUtils';
  * subscription.on('close', () => {
  *
  * });</pre></p>
- *
- * @alias Parse.LiveQuerySubscription
  */
-class Subscription extends EventEmitter {
+class Subscription {
   /*
    * @param {string} id - subscription id
    * @param {string} query - query to subscribe to
    * @param {string} sessionToken - optional session token
    */
   constructor(id, query, sessionToken) {
-    super();
     this.id = id;
     this.query = query;
     this.sessionToken = sessionToken;
     this.subscribePromise = resolvingPromise();
+    this.unsubscribePromise = resolvingPromise();
     this.subscribed = false;
+    const EventEmitter = CoreManager.getEventEmitter();
+    this.emitter = new EventEmitter();
 
+    this.on = this.emitter.on;
+    this.emit = this.emitter.emit;
     // adding listener so process does not crash
     // best practice is for developer to register their own listener
     this.on('error', () => {});
@@ -125,8 +115,8 @@ class Subscription extends EventEmitter {
     return CoreManager.getLiveQueryController()
       .getDefaultLiveQueryClient()
       .then(liveQueryClient => {
-        liveQueryClient.unsubscribe(this);
         this.emit('close');
+        return liveQueryClient.unsubscribe(this);
       });
   }
 }

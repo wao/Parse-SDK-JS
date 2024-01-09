@@ -1,11 +1,4 @@
 /**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -157,7 +150,9 @@ export function estimateAttributes(
 function nestedSet(obj, key, value) {
   const path = key.split('.');
   for (let i = 0; i < path.length - 1; i++) {
-    if (!(path[i] in obj)) obj[path[i]] = {};
+    if (!(path[i] in obj)) {
+      obj[path[i]] = {};
+    }
     obj = obj[path[i]];
   }
   if (typeof value === 'undefined') {

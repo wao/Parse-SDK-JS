@@ -1,11 +1,4 @@
 /**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -53,6 +46,9 @@ export function run(name: string, data: mixed, options: RequestOptions): Promise
   }
   if (options.sessionToken) {
     requestOptions.sessionToken = options.sessionToken;
+  }
+  if (options.installationId) {
+    requestOptions.installationId = options.installationId;
   }
   if (options.context && typeof options.context === 'object') {
     requestOptions.context = options.context;
@@ -135,12 +131,14 @@ const DefaultController = {
     return RESTController.request('GET', 'cloud_code/jobs/data', null, options);
   },
 
-  startJob(name, data, options: RequestOptions) {
+  async startJob(name, data, options: RequestOptions) {
     const RESTController = CoreManager.getRESTController();
 
     const payload = encode(data, true);
+    options.returnStatus = true;
 
-    return RESTController.request('POST', 'jobs/' + name, payload, options);
+    const response = await RESTController.request('POST', 'jobs/' + name, payload, options);
+    return response._headers?.['X-Parse-Job-Status-Id'];
   },
 };
 

@@ -1,12 +1,3 @@
-/**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- */
-
 jest.autoMockOff();
 
 const mockRNStorageInterface = require('./test_helpers/mockRNStorage');
@@ -17,9 +8,11 @@ const CoreManager = require('../CoreManager');
 
 global.wx = mockWeChat;
 global.localStorage = mockStorageInterface;
+global.indexedDB = mockIndexedDB;
 jest.mock('idb-keyval', () => {
   return mockIndexedDB;
 });
+const idbKeyVal = require('idb-keyval');
 
 const BrowserStorageController = require('../StorageController.browser');
 
@@ -165,10 +158,12 @@ describe('React Native StorageController', () => {
   });
 });
 
-const IndexedDBStorageController = require('../IndexedDBStorageController');
-
-describe('React Native StorageController', () => {
+describe('IndexDB StorageController', () => {
+  let IndexedDBStorageController;
   beforeEach(() => {
+    jest.isolateModules(() => {
+      IndexedDBStorageController = require('../IndexedDBStorageController');
+    });
     IndexedDBStorageController.clear();
   });
 
@@ -202,6 +197,24 @@ describe('React Native StorageController', () => {
     expect(result).toBe('myValue');
     const keys = await IndexedDBStorageController.getAllKeysAsync();
     expect(keys[0]).toBe('myKey');
+  });
+
+  it('handle indexedDB is not defined', async () => {
+    global.indexedDB = undefined;
+    const dbController = require('../IndexedDBStorageController');
+    expect(dbController).toBeUndefined();
+    global.indexedDB = mockIndexedDB;
+  });
+
+  it('handle indexedDB is not accessible', async () => {
+    jest.isolateModules(() => {
+      global.indexedDB = mockIndexedDB;
+      jest.spyOn(idbKeyVal, 'createStore')
+        .mockImplementationOnce(() => { throw new Error('Protected'); });
+      const dbController = require('../IndexedDBStorageController');
+      expect(dbController).toBeUndefined();
+      expect(idbKeyVal.createStore).toHaveBeenCalled();
+    });
   });
 });
 

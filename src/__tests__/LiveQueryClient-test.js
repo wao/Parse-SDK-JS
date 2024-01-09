@@ -1,12 +1,3 @@
-/**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- */
-
 jest.dontMock('../LiveQueryClient');
 jest.dontMock('../arrayContainsObject');
 jest.dontMock('../canBeSerialized');
@@ -44,6 +35,7 @@ const mockLocalDatastore = {
 jest.setMock('../LocalDatastore', mockLocalDatastore);
 
 const CoreManager = require('../CoreManager');
+const EventEmitter = require('../EventEmitter');
 const LiveQueryClient = require('../LiveQueryClient').default;
 const ParseObject = require('../ParseObject').default;
 const ParseQuery = require('../ParseQuery').default;
@@ -55,6 +47,7 @@ CoreManager.setLocalDatastore(mockLocalDatastore);
 describe('LiveQueryClient', () => {
   beforeEach(() => {
     mockLocalDatastore.isEnabled = false;
+    CoreManager.setEventEmitter(EventEmitter);
   });
 
   it('serverURL required', () => {
@@ -79,34 +72,6 @@ describe('LiveQueryClient', () => {
       done();
     });
     liveQueryClient.open();
-  });
-
-  it('can unsubscribe', async () => {
-    const liveQueryClient = new LiveQueryClient({
-      applicationId: 'applicationId',
-      serverURL: 'ws://test',
-      javascriptKey: 'javascriptKey',
-      masterKey: 'masterKey',
-      sessionToken: 'sessionToken',
-    });
-    liveQueryClient.socket = {
-      send: jest.fn(),
-    };
-    const subscription = {
-      id: 1,
-    };
-    liveQueryClient.subscriptions.set(1, subscription);
-
-    liveQueryClient.unsubscribe(subscription);
-    liveQueryClient.connectPromise.resolve();
-    expect(liveQueryClient.subscriptions.size).toBe(0);
-    await liveQueryClient.connectPromise;
-    const messageStr = liveQueryClient.socket.send.mock.calls[0][0];
-    const message = JSON.parse(messageStr);
-    expect(message).toEqual({
-      op: 'unsubscribe',
-      requestId: 1,
-    });
   });
 
   it('can handle open / close states', () => {
@@ -293,6 +258,7 @@ describe('LiveQueryClient', () => {
     });
     const subscription = new events.EventEmitter();
     subscription.subscribePromise = resolvingPromise();
+    subscription.unsubscribePromise = resolvingPromise();
 
     liveQueryClient.subscriptions.set(1, subscription);
     const data = {
@@ -304,10 +270,10 @@ describe('LiveQueryClient', () => {
       data: JSON.stringify(data),
     };
     liveQueryClient._handleWebSocketMessage(event);
-    expect(liveQueryClient.subscriptions.size).toBe(1);
+    expect(liveQueryClient.subscriptions.size).toBe(0);
   });
 
-  it('can handle WebSocket error response message', () => {
+  it('can handle WebSocket error response message', async () => {
     const liveQueryClient = new LiveQueryClient({
       applicationId: 'applicationId',
       serverURL: 'ws://test',
@@ -329,13 +295,17 @@ describe('LiveQueryClient', () => {
       isChecked = true;
       expect(error).toEqual('error');
     });
-
-    liveQueryClient._handleWebSocketMessage(event);
+    try {
+      liveQueryClient._handleWebSocketMessage(event);
+      await liveQueryClient.connectPromise;
+    } catch (error) {
+      expect(error.message).toEqual('error');
+    }
 
     expect(isChecked).toBe(true);
   });
 
-  it('can handle WebSocket error while subscribing', () => {
+  it('can handle WebSocket error while subscribing', async () => {
     const liveQueryClient = new LiveQueryClient({
       applicationId: 'applicationId',
       serverURL: 'ws://test',
@@ -363,7 +333,17 @@ describe('LiveQueryClient', () => {
       expect(error).toEqual('error thrown');
     });
 
-    liveQueryClient._handleWebSocketMessage(event);
+    try {
+      liveQueryClient._handleWebSocketMessage(event);
+      await Promise.all([
+        subscription.connectPromise,
+        subscription.subscribePromise,
+        liveQueryClient.connectPromise,
+        liveQueryClient.subscribePromise,
+      ]);
+    } catch (e) {
+      expect(e.message).toEqual('error thrown');
+    }
 
     jest.runOnlyPendingTimers();
     expect(isChecked).toBe(true);
@@ -522,6 +502,43 @@ describe('LiveQueryClient', () => {
     spy.mockRestore();
   });
 
+  it('can handle select in websocket payload', () => {
+    const liveQueryClient = new LiveQueryClient({
+      applicationId: 'applicationId',
+      serverURL: 'ws://test',
+      javascriptKey: 'javascriptKey',
+      masterKey: 'masterKey',
+      sessionToken: 'sessionToken',
+    });
+    // Add mock subscription
+    const subscription = new events.EventEmitter();
+    subscription.query = new ParseQuery('Test').select('foo');
+    liveQueryClient.subscriptions.set(1, subscription);
+    const object = new ParseObject('Test');
+    const original = new ParseObject('Test');
+    object.set('key', 'value');
+    original.set('key', 'old');
+    const data = {
+      op: 'update',
+      clientId: 1,
+      requestId: 1,
+      object: object._toFullJSON(),
+      original: original._toFullJSON(),
+    };
+    const event = {
+      data: JSON.stringify(data),
+    };
+
+    const spy = jest
+      .spyOn(ParseObject, 'fromJSON')
+      .mockImplementationOnce(() => original)
+      .mockImplementationOnce(() => object);
+
+    liveQueryClient._handleWebSocketMessage(event);
+    expect(ParseObject.fromJSON.mock.calls[1][1]).toEqual(false);
+    spy.mockRestore();
+  });
+
   it('can handle WebSocket response unset field', async () => {
     const liveQueryClient = new LiveQueryClient({
       applicationId: 'applicationId',
@@ -589,6 +606,7 @@ describe('LiveQueryClient', () => {
   });
 
   it('can handle WebSocket close message while disconnected', () => {
+    CoreManager.setWebSocketController();
     const liveQueryClient = new LiveQueryClient({
       applicationId: 'applicationId',
       serverURL: 'ws://test',
@@ -703,7 +721,7 @@ describe('LiveQueryClient', () => {
     liveQueryClient._handleWebSocketError(error);
   });
 
-  it('can handle WebSocket reconnect on error event', () => {
+  it('can handle WebSocket reconnect on error event', async () => {
     const liveQueryClient = new LiveQueryClient({
       applicationId: 'applicationId',
       serverURL: 'ws://test',
@@ -727,11 +745,31 @@ describe('LiveQueryClient', () => {
       expect(error).toEqual(data.error);
     });
     const spy = jest.spyOn(liveQueryClient, '_handleReconnect');
-    liveQueryClient._handleWebSocketMessage(event);
+    try {
+      liveQueryClient._handleWebSocketMessage(event);
+      await liveQueryClient.connectPromise;
+    } catch (e) {
+      expect(e.message).toBe('Additional properties not allowed');
+    }
 
     expect(isChecked).toBe(true);
     expect(liveQueryClient._handleReconnect).toHaveBeenCalledTimes(1);
     expect(liveQueryClient.additionalProperties).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('can handle WebSocket disconnect if already disconnected', async () => {
+    const liveQueryClient = new LiveQueryClient({
+      applicationId: 'applicationId',
+      serverURL: 'ws://test',
+      javascriptKey: 'javascriptKey',
+      masterKey: 'masterKey',
+      sessionToken: 'sessionToken',
+    });
+    const spy = jest.spyOn(liveQueryClient, '_handleReconnect');
+    liveQueryClient.state = 'disconnected';
+    liveQueryClient._handleWebSocketClose();
+    expect(liveQueryClient._handleReconnect).toHaveBeenCalledTimes(0);
     spy.mockRestore();
   });
 
@@ -824,12 +862,13 @@ describe('LiveQueryClient', () => {
     };
     const subscription = {
       id: 1,
+      unsubscribePromise: resolvingPromise(),
     };
     liveQueryClient.subscriptions.set(1, subscription);
 
     liveQueryClient.unsubscribe(subscription);
     liveQueryClient.connectPromise.resolve();
-    expect(liveQueryClient.subscriptions.size).toBe(0);
+    expect(liveQueryClient.subscriptions.size).toBe(1);
     await liveQueryClient.connectPromise;
     const messageStr = liveQueryClient.socket.send.mock.calls[0][0];
     const message = JSON.parse(messageStr);
@@ -837,6 +876,14 @@ describe('LiveQueryClient', () => {
       op: 'unsubscribe',
       requestId: 1,
     });
+    const event = {
+      data: JSON.stringify({
+        op: 'unsubscribed',
+        requestId: 1,
+      }),
+    };
+    liveQueryClient._handleWebSocketMessage(event);
+    expect(liveQueryClient.subscriptions.size).toBe(0);
   });
 
   it('can unsubscribe without subscription', async () => {
@@ -854,6 +901,31 @@ describe('LiveQueryClient', () => {
     liveQueryClient.connectPromise.resolve();
     await liveQueryClient.connectPromise;
     expect(liveQueryClient.socket.send).toHaveBeenCalledTimes(0);
+  });
+
+  it('cannot subscribe on connection error', async () => {
+    const liveQueryClient = new LiveQueryClient({
+      applicationId: 'applicationId',
+      serverURL: 'ws://test',
+      javascriptKey: 'javascriptKey',
+      masterKey: 'masterKey',
+      sessionToken: 'sessionToken',
+    });
+    liveQueryClient.socket = {
+      send: jest.fn(),
+    };
+    const query = new ParseQuery('Test');
+    query.equalTo('key', 'value');
+
+    const subscription = liveQueryClient.subscribe(query);
+    liveQueryClient.connectPromise.reject(new Error('Unable to connect'));
+    liveQueryClient.connectPromise.catch(() => {});
+    try {
+      await subscription.subscribePromise;
+      expect(true).toBeFalse();
+    } catch (e) {
+      expect(e.message).toBe('Unable to connect');
+    }
   });
 
   it('can resubscribe', async () => {

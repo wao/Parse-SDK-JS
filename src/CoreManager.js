@@ -1,11 +1,4 @@
 /*
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
  * @flow
  */
 
@@ -201,6 +194,7 @@ const config: Config & { [key: string]: mixed } = {
   ENCRYPTED_USER: false,
   IDEMPOTENCY: false,
   ALLOW_CUSTOM_OBJECT_ID: false,
+  PARSE_ERRORS: [],
 };
 
 function requireMethods(name: string, methods: Array<string>, controller: any) {
@@ -211,7 +205,7 @@ function requireMethods(name: string, methods: Array<string>, controller: any) {
   });
 }
 
-module.exports = {
+const CoreManager = {
   get: function (key: string): any {
     if (config.hasOwnProperty(key)) {
       return config[key];
@@ -221,6 +215,13 @@ module.exports = {
 
   set: function (key: string, value: any): void {
     config[key] = value;
+  },
+
+  setIfNeeded: function (key: string, value: any): any {
+    if (!config.hasOwnProperty(key)) {
+      config[key] = value;
+    }
+    return config[key];
   },
 
   /* Specialized Controller Setters/Getters */
@@ -261,6 +262,14 @@ module.exports = {
     return config['CryptoController'];
   },
 
+  setEventEmitter(eventEmitter: any) {
+    config['EventEmitter'] = eventEmitter;
+  },
+
+  getEventEmitter(): any {
+    return config['EventEmitter'];
+  },
+
   setFileController(controller: FileController) {
     requireMethods('FileController', ['saveFile', 'saveBase64'], controller);
     config['FileController'] = controller;
@@ -277,6 +286,14 @@ module.exports = {
 
   getInstallationController(): InstallationController {
     return config['InstallationController'];
+  },
+
+  setLiveQuery(liveQuery: any) {
+    config['LiveQuery'] = liveQuery;
+  },
+
+  getLiveQuery(): any {
+    return config['LiveQuery'];
   },
 
   setObjectController(controller: ObjectController) {
@@ -475,3 +492,6 @@ module.exports = {
     return config['HooksController'];
   },
 };
+
+module.exports = CoreManager;
+export default CoreManager;

@@ -1,15 +1,7 @@
-/**
- * Copyright (c) 2015-present, Parse, LLC.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- */
-
 jest.dontMock('../CoreManager');
 jest.dontMock('../encode');
 jest.dontMock('../decode');
+jest.dontMock('../EventEmitter');
 jest.dontMock('../ParseError');
 jest.dontMock('../ParseGeoPoint');
 jest.dontMock('../ParseQuery');
@@ -49,6 +41,7 @@ const mockLocalDatastore = {
 jest.setMock('../LocalDatastore', mockLocalDatastore);
 
 let CoreManager = require('../CoreManager');
+const EventEmitter = require('../EventEmitter');
 const ParseError = require('../ParseError').default;
 const ParseGeoPoint = require('../ParseGeoPoint').default;
 let ParseObject = require('../ParseObject');
@@ -61,6 +54,7 @@ const MockRESTController = {
 };
 
 const QueryController = CoreManager.getQueryController();
+CoreManager.setEventEmitter(EventEmitter);
 
 import { DEFAULT_PIN } from '../LocalDatastoreUtils';
 
@@ -1087,6 +1081,32 @@ describe('ParseQuery', () => {
     expect(q2._exclude).toEqual(['foo', 'bar']);
   });
 
+  it('can watch keys', () => {
+    const q = new ParseQuery('Item');
+    q.watch('foo');
+    const json = q.toJSON();
+    expect(json).toEqual({
+      where: {},
+      watch: 'foo',
+    });
+    const q2 = new ParseQuery('Item');
+    q2.withJSON(json);
+    expect(q2._watch).toEqual(['foo']);
+  });
+
+  it('can watch multiple keys', () => {
+    const q = new ParseQuery('Item');
+    q.watch(['foo', 'bar']);
+    const json = q.toJSON();
+    expect(json).toEqual({
+      where: {},
+      watch: 'foo,bar',
+    });
+    const q2 = new ParseQuery('Item');
+    q2.withJSON(json);
+    expect(q2._watch).toEqual(['foo', 'bar']);
+  });
+
   it('can use extraOptions', () => {
     const q = new ParseQuery('Item');
     q._extraOptions.randomOption = 'test';
@@ -1376,6 +1396,16 @@ describe('ParseQuery', () => {
     expect(result.size).toBe('small');
     expect(result.name).toEqual('Product 3');
     expect(result.className).toEqual('Item');
+
+    await q.each(
+      obj => {
+        expect(obj.objectId).toBe('I1');
+        expect(obj.size).toBe('small');
+        expect(obj.name).toEqual('Product 3');
+        expect(obj.className).toEqual('Item');
+      },
+      { json: true }
+    );
   });
 
   it('will error when getting a nonexistent object', done => {
@@ -1751,7 +1781,6 @@ describe('ParseQuery', () => {
       const q = new ParseQuery('Item');
       await q.eachBatch(items => {
         items.map(item => results.push(item.attributes.size));
-        return new Promise(resolve => setImmediate(resolve));
       });
       expect(results).toEqual(['medium', 'small']);
     });
@@ -1788,6 +1817,7 @@ describe('ParseQuery', () => {
       q.select('size', 'name');
       q.includeAll();
       q.hint('_id_');
+      q.exclude('foo')
 
       await q.findAll();
       expect(findMock).toHaveBeenCalledTimes(1);
@@ -1798,6 +1828,7 @@ describe('ParseQuery', () => {
         order: 'objectId',
         keys: 'size,name',
         include: '*',
+        excludeKeys: 'foo',
         hint: '_id_',
         where: {
           size: {
@@ -2334,8 +2365,7 @@ describe('ParseQuery', () => {
 
     const q = new ParseQuery('Thing');
     let testObject;
-    return q
-      .find()
+    q.find()
       .then(results => {
         testObject = results[0];
 
@@ -2460,8 +2490,7 @@ describe('ParseQuery', () => {
 
     const q = new ParseQuery('Thing');
     let testObject;
-    return q
-      .first()
+    q.first()
       .then(result => {
         testObject = result;
 
@@ -2875,8 +2904,7 @@ describe('ParseQuery', () => {
     const q = new ParseQuery('Thing');
     q.select('other', 'tbd', 'subObject.key1');
     let testObject;
-    return q
-      .find()
+    q.find()
       .then(results => {
         testObject = results[0];
 
@@ -2926,8 +2954,7 @@ describe('ParseQuery', () => {
 
     const q = new ParseQuery('Thing');
     let testObject;
-    return q
-      .find()
+    q.find()
       .then(results => {
         testObject = results[0];
 
